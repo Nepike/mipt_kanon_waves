@@ -7,8 +7,8 @@ from mpl_toolkits.mplot3d import Axes3D
 
 D     = 1.0    # коэффициент скорости: c^2(x) = D*x
 PY0   = 0.5    # фиксированная компонента импульса  p_y⁰
-H     = 1.0    # постоянная Планка
-N_MAX = 5      # число уровней E_n
+H     = 0.2    # постоянная Планка
+N_MAX = 7     # число уровней E_n
 EPS   = 1e-4   # отступ от x=0 для численных расчётов
 
 
@@ -110,11 +110,15 @@ def quant_equation(E, n):
 
 
 def find_energy_levels(n_max):
-    """Нахождение E_n методом Брента для n=1..n_max."""
-    E_min = PY0 * np.sqrt(D) * 1.001   # условие x0 > 1
+    E_min = PY0 * np.sqrt(D) + 1e-9
     levels = []
     print('Уровни энергии E_n:')
     for n in range(1, n_max + 1):
+        f_min = quant_equation(E_min, n)
+        f_max = quant_equation(500.0, n)
+        if f_min * f_max > 0:
+            print(f'  n={n}: нет решения в физической области (x0>1), пропускаем')
+            continue
         En = brentq(quant_equation, E_min, 500.0, args=(n,), xtol=1e-12)
         levels.append((n, En))
         print(f'  n={n}:  E_n = {En:.6f},  x0 = {turning_point(En):.3f}')
@@ -257,7 +261,7 @@ def G_generating(px, En):
     """
     Производящая функция G(p_x) в p_x-карте.
     """
-    return (En**2 / (D * PY0)) * np.arctan(px / PY0)
+    return -(En**2 / (D * PY0**2)) * np.arctan(px / PY0)
 
 
 def amplitude_A(px, En):
@@ -268,12 +272,9 @@ def amplitude_A(px, En):
 
 
 def maslov_phase(px):
-    """
-    Фаза Маслова:
-      px > 0: верхняя ветвь, ещё не прошли берег  => phi_M = 0
-      px < 0: нижняя ветвь, берег пройден (Δm=1)  => phi_M = −pi/2
-    """
-    return np.where(px >= 0, 0.0, -np.pi / 2)
+    # нижняя ветвь (px < 0): m = 0+0 = 0  →  фаза = 0
+    # верхняя ветвь (px > 0): m = 1+1 = 2  →  фаза = -pi
+    return np.where(px >= 0, -np.pi, 0.0)
 
 
 def u_tilde(px, En):
@@ -291,7 +292,9 @@ def u_wave(x_val, En, P_max=80, N=20000):
     Вычисляется численно методом трапеций.
     """
     px        = np.linspace(-P_max, P_max, N)
-    integrand = u_tilde(px, En) * np.exp(1j * x_val * px / H)
+    mask = np.abs(px) >= np.sqrt(En ** 2 / (x_val*D) - PY0 ** 2)
+    integrand = np.where(mask, u_tilde(px, En) * np.exp(1j * x_val * px / H), 0.0)
+
     return np.trapezoid(integrand, px) / np.sqrt(2 * np.pi * H)
 
 
@@ -333,7 +336,7 @@ def fig5_canonical_operator(E_levels, x_arr, save='fig5_canonical_operator.png')
 
     for i, (n, En) in enumerate(E_levels[:4]):
         u_vals = np.array([u_wave(x, En) for x in x_arr])
-        axes[1, 0].plot(x_arr, np.real(u_vals), color=colors[i], lw=1.8, label=f'$n={n},\\ E_n={En:.2f}$')
+        axes[1, 0].plot(x_arr, np.imag(u_vals), color=colors[i], lw=1.8, label=f'$n={n},\\ E_n={En:.2f}$')
         axes[1, 1].plot(x_arr, np.abs(u_vals),  color=colors[i], lw=1.8, label=f'$n={n},\\ E_n={En:.2f}$')
 
     for ax, title, yl in [
